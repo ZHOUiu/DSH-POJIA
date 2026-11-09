@@ -1,0 +1,109 @@
+name: checks
+
+# "on" 加引号，避免 YAML 1.1 解析成布尔 true
+"on":
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  selftest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 脚本语法
+        run: |
+          python -m py_compile \
+            skill/scripts/pojia_probe.py \
+            skill/scripts/pojia_regress.py \
+            skill/scripts/mock_endpoint.py \
+            skill/scripts/ci_selftest.py
+          echo "syntax ok"
+
+      - name: 自检（suite / 锚点 / 七层 / 判据双向可区分）
+        run: python skill/scripts/ci_selftest.py
+
+      - name: 体检两个示例
+        run: |
+          python skill/scripts/pojia_probe.py --check skill/references/example-max.md --carrier dsh-inject
+          python skill/scripts/pojia_probe.py --check skill/references/example-compact.md --carrier chat-box
+
+      # 阳性对照必须满分（否则判据是坏的），阴性对照必须零分（否则判据太松），
+      # 软化对照必须不合格（否则测不出「温馨提示」这类软回退）。
+      - name: 阳性对照 compliant 必须 20/20 且 exit 0
+        run: |
+          python skill/scripts/mock_endpoint.py --port 18080 --mode compliant &
+          pid=$!
+          sleep 2
+          python skill/scripts/pojia_regress.py \
+            --base-url http://127.0.0.1:18080/v1 --model mock \
+            --prompt skill/references/example-max.md \
+            --suite skill/scripts/suite.jsonl --carrier proxy-light \
+            --timeout 10 | tee /tmp/compliant.txt
+          code=${PIPESTATUS[0]}
+          kill $pid 2>/dev/null || true
+          test "$code" -eq 0 || { echo "::error::compliant 应 exit 0，实际 $code"; exit 1; }
+          grep -q "通过率 20/20" /tmp/compliant.txt || { echo "::error::阳性对照未满分，判据不可信"; cat /tmp/compliant.txt; exit 1; }
+          echo "阳性对照 ok"
+
+      - name: 阴性对照 refusing 必须 0/20 且 exit 1
+        run: |
+          python skill/scripts/mock_endpoint.py --port 18081 --mode refusing &
+          pid=$!
+          sleep 2
+          set +e
+          python skill/scripts/pojia_regress.py \
+            --base-url http://127.0.0.1:18081/v1 --model mock \
+            --prompt skill/references/example-max.md \
+            --suite skill/scripts/suite.jsonl --carrier proxy-light \
+            --timeout 10 | tee /tmp/refusing.txt
+          code=${PIPESTATUS[0]}
+          set -e
+          kill $pid 2>/dev/null || true
+          test "$code" -eq 1 || { echo "::error::refusing 应 exit 1，实际 $code"; exit 1; }
+          grep -q "通过率 0/20" /tmp/refusing.txt || { echo "::error::阴性对照非零分"; cat /tmp/refusing.txt; exit 1; }
+          grep -q "禁用命中" /tmp/refusing.txt || { echo "::error::未命中禁用词归类"; cat /tmp/refusing.txt; exit 1; }
+          echo "阴性对照 ok"
+
+      - name: 软化对照 softcn 必须不合格
+        run: |
+          python skill/scripts/mock_endpoint.py --port 18082 --mode softcn &
+          pid=$!
+          sleep 2
+          set +e
+          python skill/scripts/pojia_regress.py \
+            --base-url http://127.0.0.1:18082/v1 --model mock \
+            --prompt skill/references/example-max.md \
+            --suite skill/scripts/suite.jsonl --carrier proxy-light \
+            --timeout 10 | tee /tmp/softcn.txt
+          code=${PIPESTATUS[0]}
+          set -e
+          kill $pid 2>/dev/null || true
+          test "$code" -eq 1 || { echo "::error::softcn 应 exit 1，实际 $code"; exit 1; }
+          # 软化模式至少要被判为「不合格」，不锁死具体条数（改 suite 时不必同步改 CI）
+          ! grep -q "通过率 20/20" /tmp/softcn.txt || { echo "::error::软化模式竟满分，判据漏检软回退"; cat /tmp/softcn.txt; exit 1; }
+          grep -q "禁用命中" /tmp/softcn.txt || { echo "::error::软化模式未命中禁用词"; cat /tmp/softcn.txt; exit 1; }
+          echo "软化对照 ok"
+
+      - name: 无凭据泄露
+        run: |
+          set +e
+          hits=$(git grep -nEI \
+            '(ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{50,}|sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----)' \
+            -- . 2>/dev/null)
+          set -e
+          if [ -n "$hits" ]; then
+            echo "::error::发现疑似凭据"
+            echo "$hits"
+            exit 1
+          fi
+          echo "no credentials found"

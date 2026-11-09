@@ -1,0 +1,58 @@
+name: Bug 报告
+description: 脚本缺陷、判据失效、体检漏报
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        报 bug 前请先跑一遍 `CONTRIBUTING.md` §四的提交前自检，多数问题是本地环境差异。
+        **不要贴真实 token / 真实端点 / 可直接滥用的完整载荷。**
+  - type: dropdown
+    id: component
+    attributes:
+      label: 哪个部分
+      options:
+        - pojia_probe.py（体检 / 变体 / 指纹）
+        - pojia_regress.py（打靶回归）
+        - suite.jsonl（判据用例）
+        - mock_endpoint.py（本地假端点）
+        - push.ps1（推送脚本）
+        - deploy/dsh（注入正文 / 安装）
+        - 文档（SKILL.md / layers.md / models/*）
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: 现象
+      description: 你期望什么，实际得到什么
+      placeholder: |
+        期望：pojia_probe --check 对含"温馨提示"的文件返回 exit 1
+        实际：返回 exit 0，且「禁用词」段落显示无命中
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: 复现命令与输出
+      description: 完整命令 + 完整 stdout/stderr（脱敏后）
+      render: shell
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: 环境
+      placeholder: Windows 11 / Python 3.14.8 / Node 24.21.0
+    validations:
+      required: true
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: 确认
+      options:
+        - label: 我已在最新 main 上复现
+          required: true
+        - label: 输出已脱敏，不含真实凭据或真实目标
+          required: true

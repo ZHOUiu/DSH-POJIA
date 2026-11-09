@@ -1,0 +1,50 @@
+name: 新模型族 / 新载体
+description: 提一份模型族骨架，或新的载体预算档
+title: "[model] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **要求**：不能只贴一份 prompt。必须写清该族/该载体的**易踩点**（≥3 条）与实测依据。
+        若内容来自第三方仓库，先看 `SOURCES.md` §1.1 的再分发限制。
+  - type: input
+    id: target
+    attributes:
+      label: 目标模型或载体
+      placeholder: Kimi K3 / GLM-5.3 / Ollama Modelfile / 某自建反代
+    validations:
+      required: true
+  - type: textarea
+    id: traits
+    attributes:
+      label: 该族/载体的行为特征
+      description: 至少 3 条，每条要能对应到 SKILL.md 七层结构里的某一层
+      placeholder: |
+        1. 拒答多带"温馨提示"软化（对应 L5）
+        2. 爱先复述需求（对应 L4）
+        3. 条件句会被读成建议（对应 §3 削弱项）
+    validations:
+      required: true
+  - type: textarea
+    id: pitfall
+    attributes:
+      label: 最容易踩的坑
+      description: 你实际踩到的，不是猜的
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 实测依据
+      description: 跑了什么、通过率多少（`pojia_regress.py` 的输出）
+      render: shell
+  - type: checkboxes
+    id: license
+    attributes:
+      label: 授权确认
+      options:
+        - label: 我的贡献是原创（非逐字复制第三方 prompt）
+          required: true
+        - label: 我已阅读 CONTRIBUTING-LICENSE.md 并选择 A 路径（inbound = outbound）
+          required: true

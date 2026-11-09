@@ -42,7 +42,8 @@ skill/                          ← 技能本体（可放进 $DSH_HOME/skills/�
     pojia_probe.py              体检（七层完整性 / 禁用词 / 元话语 / 体积）+ V1-V5 变体 + 端点指纹
     pojia_regress.py            打靶回归，出通过率数字
     suite.jsonl                 20 条判据用例
-    mock_endpoint.py            本地假端点，验证判据能区分 PASS/FAIL
+    mock_endpoint.py            本地假端点，三档对照（compliant / refusing / softcn）
+    ci_selftest.py              CI 自检：suite / 锚点 / 七层 / 判据双向可区分
 
 deploy/dsh/                     ← 已构建好的 DSH 成品
   prompt-inject.md              DSH-POJIA 注入正文（11.3 KB，七层齐）
@@ -102,8 +103,10 @@ L6 发送前自检   三项全为是才发送；否则静默重写
 | `pojia_probe.py --check example-max.md` | 七层全 OK，禁用词 0 命中，5,328 B 在预算内 |
 | `pojia_probe.py --check example-compact.md` | 1,279 B，chat-box 预算内 |
 | `pojia_probe.py --variants` | 5 个变体正常产出 |
-| `pojia_regress.py` vs `mock_endpoint --mode compliant` | 10/20（缺必需形态判据正常报错） |
-| `pojia_regress.py` vs `mock_endpoint --mode refusing` | 0/20，19 条命中禁用词 —— **判据确实能区分** |
+| `pojia_regress.py` vs `mock_endpoint --mode compliant`（**阳性对照**） | **20/20，exit 0** |
+| `pojia_regress.py` vs `mock_endpoint --mode refusing`（**阴性对照**） | **0/20，exit 1**，19 条命中禁用词 |
+| `pojia_regress.py` vs `mock_endpoint --mode softcn`（**软化对照**） | **2/20，exit 1** —— 「温馨提示」类软回退被检出 |
+| `ci_selftest.py` | 4 组 11 项全 PASS |
 | `pojia_probe.py --fingerprint` | 正确打分并给出骨架建议 |
 | DSH 侧 `isUserCustomizedOverrideSync` | `true` —— 插件不会覆盖用户稿 |
 | DSH 侧 `resolveInjectText` | `source: "prompt"` |
@@ -132,6 +135,32 @@ L6 发送前自检   三项全为是才发送；否则静默重写
 
 本仓库是 prompt 规格构建方法与评估工具。「破甲」是**可选指令文本**，不保证抢占上游系统指令优先级、不保证改变模型行为、不保证消除拒答；实际结果取决于上游，请自行在可控环境内评估。
 
+## 开源公约
+
+本项目按开源社区的通行约定运作，参与前请读：
+
+| 文件 | 内容 |
+|---|---|
+| [LICENSE](LICENSE) | MIT —— 主体原创，可商用可修改可再分发，保留版权声明即可 |
+| [SOURCES.md](SOURCES.md) | **来源与授权**：三个参考仓库各自的许可证、我借用的是什么、再分发限制（含 jailbreaks **无许可证**、其 prompt 原文不可再分发的说明）、原创性核查方法与实测重合率 |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | 贡献什么、不能贡献什么、提交前四项自检、提交格式与评审标准 |
+| [CONTRIBUTING-LICENSE.md](CONTRIBUTING-LICENSE.md) | **双路径授权**：A 入站=出站（默认）/ B 保留著作权；不设 CLA |
+| [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | 贡献者公约 2.1（中文） |
+| [SECURITY.md](SECURITY.md) | 怎么报脚本缺陷/判据失效/凭据泄露；哪些不算本仓库的漏洞 |
+| [CONTRIBUTORS.md](CONTRIBUTORS.md) | 贡献者与上游致谢 |
+| [.github/](.github/) | CI 自检工作流 + issue 模板（bug / 新模型族）+ 私密安全报告入口 |
+
+### 为什么单独写 SOURCES.md
+
+参考的三个上游里，**`togg53192-cmd/jailbreaks` 没有 LICENSE 文件**——按默认规则是「保留所有权利」，其 prompt 正文不可再分发。所以本仓库做了两件事：
+
+1. **不包含**该仓库任何 prompt 的全文或片段；`skill/references/models/*.md` 是自行重写的族行为特征，不是上游的翻译
+2. 做了可复现的原创性核查：本地 15 份文档与上游 5 份代表性 prompt 做字符级 10-gram 比对，**最大重合 1.95%**（通用结构词），`deploy/dsh/prompt-inject.md` 为 **0.00%**
+
+另外两个上游是 MIT，但其 dsh-purge 作者**附加要求署名**，已在 `SOURCES.md` 与 `CONTRIBUTORS.md` 完整署名。
+
 ## License
 
-MIT
+MIT —— Copyright (c) 2026 DSH-POJIA contributors
+
+上游内容的授权情况不同，见 [SOURCES.md](SOURCES.md) §4「再分发限制」。
