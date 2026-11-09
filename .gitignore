@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.vscode/
+.idea/
+
+# 本地评估产物
+variants/
+regress.json
+*.log
+
+# 凭据与密钥
+.env
+*.key
+*.pem
+credentials*
