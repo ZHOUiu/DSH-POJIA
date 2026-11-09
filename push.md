@@ -35,3 +35,16 @@ $env:GH_TOKEN = 'ghp_xxxxxxxxxxxxxxxxxxxx'
 | `422 name already exists` | 同名仓库已在 | 换 `-RepoName`，或加 `-Owner` 指定账号 |
 | `remote origin already exists` | 脚本重复跑 | 脚本已处理（先 remove 再加） |
 | `push declined (protected)` | 目标分支受保护 | 换新仓库，或先在网页解开 main 保护 |
+| `Recv failure: Connection was reset` | **直连 GitHub 被 RST（国内常见）** | 脚本会自动探测本地代理；不行就显式指定：`.\push.ps1 -Proxy 'http://127.0.0.1:7890'` |
+| `Could not connect to server` (21s 超时) | 无代理且直连不通 | 开代理后重跑；`-NoProxy` 是强制直连的开关 |
+| `Failed to connect ... 443` | 代理端口写错 | 确认 Clash/V2Ray 端口：7897 / 7890 / 10809 常见 |
+
+## 实测记录（2026-11）
+
+本机直连 `github.com:443` 能握手，但 `git push` 必被 reset：
+
+```
+fatal: unable to access 'https://github.com/.../': Recv failure: Connection was reset
+```
+
+走本地代理 7897 后一次通过。脚本已内置自动探测 + 3 次重试。
