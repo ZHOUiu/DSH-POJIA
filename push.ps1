@@ -5,13 +5,32 @@ param(
     [string]$Owner,
     [string]$RepoName = 'DSH-POJIA',
     [ValidateSet('public', 'private')][string]$Visibility = 'public',
-    [string]$Description = 'Armor-break prompt skill: three-layer instruction chain (host / injection / payload) with probe + regression scripts.'
+    [string]$Description = 'Armor-break prompt skill: three-layer instruction chain (host / injection / payload) with probe + regression scripts.',
+    # 国内直连 GitHub 常被 reset：自动探测本地代理；设 -NoProxy 强制直连
+    [string]$Proxy,
+    [switch]$NoProxy
 )
 
 $ErrorActionPreference = 'Stop'
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Token = $env:GH_TOKEN
 if (-not $Token) { throw '缺少 $env:GH_TOKEN。先设: $env:GH_TOKEN = ''ghp_xxx''' }
+
+# 0. 代理探测：直连常被 reset，有本地代理就走代理（API 和 git 用同一个）
+$ProxyUrl = ''
+if (-not $NoProxy) {
+    if ($Proxy) {
+        $ProxyUrl = $Proxy
+    } else {
+        foreach ($p in 7897, 7890, 10809, 1080, 10808, 2080, 8080) {
+            if (Test-NetConnection 127.0.0.1 -Port $p -InformationLevel Quiet -WarningAction SilentlyContinue) {
+                $ProxyUrl = "http://127.0.0.1:$p"
+                break
+            }
+        }
+    }
+}
+if ($ProxyUrl) { Write-Host "      proxy: $ProxyUrl" } else { Write-Host '      proxy: 直连' }
 
 function Api {
     param([string]$Method, [string]$Path, $Body)
@@ -22,6 +41,7 @@ function Api {
         'User-Agent'           = 'DSH-POJIA-push'
     }
     $args = @{ Uri = "https://api.github.com$Path"; Headers = $h; Method = $Method; TimeoutSec = 30 }
+    if ($ProxyUrl) { $args.Proxy = $ProxyUrl }
     if ($Body) {
         $args.Body = ($Body | ConvertTo-Json -Depth 6)
         $args.ContentType = 'application/json; charset=utf-8'
@@ -76,12 +96,27 @@ Write-Host '[4/5] 配置 remote ...'
 $authUrl = "https://$Token@github.com/$Owner/$RepoName.git"
 git -C $Root remote remove origin 2>$null
 git -C $Root remote add origin $authUrl
+if ($ProxyUrl) {
+    git -C $Root config http.proxy $ProxyUrl
+    git -C $Root config https.proxy $ProxyUrl
+}
+git -C $Root config http.version HTTP/1.1
 Write-Host '      ok'
 
-# 5. 推送
+# 5. 推送（直连被 reset 时自动重试一次）
 Write-Host '[5/5] push -> main ...'
-git -C $Root push -u origin main 2>&1 | ForEach-Object { Write-Host "      $_" }
-if ($LASTEXITCODE -ne 0) { throw "git push 失败（exit $LASTEXITCODE）" }
+$pushed = $false
+foreach ($attempt in 1..3) {
+    git -C $Root push -u origin main 2>&1 | ForEach-Object { Write-Host "      $_" }
+    if ($LASTEXITCODE -eq 0) { $pushed = $true; break }
+    if ($attempt -lt 3) {
+        Write-Host "      第 $attempt 次失败，2s 后重试 ..."
+        Start-Sleep -Seconds 2
+    }
+}
+if (-not $pushed) {
+    throw "git push 失败（3 次均未成功）。若报 Connection was reset，说明直连被墙：确认本地代理已开，或 .\push.ps1 -Proxy 'http://127.0.0.1:7890'"
+}
 
 # 洗掉 remote 里的 token
 git -C $Root remote set-url origin "https://github.com/$Owner/$RepoName.git"
